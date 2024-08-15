@@ -18,6 +18,10 @@ app.get("/data/topics", async (req, res) => {
     res.send(result);
 });
 
+app.get("/dummy", (req, res) => {
+    res.end("OK")
+})
+
 app.get("/data/:topic/:id", async (req, res) => {
     const topicName = req.params.topic;
     switch (topicName) {
