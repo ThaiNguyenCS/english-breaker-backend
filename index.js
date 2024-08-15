@@ -7,7 +7,7 @@ const {
     getTopicsMetadata,
     getTedTalkVideos,
     getTedTalkVideoByID,
-} = require("../database");
+} = require("./database");
 
 const app = express();
 app.use(express.static("../front_end/dist"));
@@ -62,3 +62,5 @@ app.get("*", (req, res) => {
 app.listen(5000, () => {
     console.log("Server's listening");
 });
+
+module.exports = app;
