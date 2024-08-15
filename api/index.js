@@ -7,7 +7,7 @@ const {
     getTopicsMetadata,
     getTedTalkVideos,
     getTedTalkVideoByID,
-} = require("./database");
+} = require("../database");
 
 const app = express();
 app.use(express.static("../front_end/dist"));
