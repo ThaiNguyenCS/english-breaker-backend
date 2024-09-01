@@ -22,6 +22,7 @@ const {
     getTestDetailBySelectedPart,
     saveUserTestProgress,
     getTestHistories,
+    getTestResult
 } = require("./database/tests.js");
 
 var corsOptions = {
@@ -167,6 +168,15 @@ app.get("/api/test/practice/:id/history", verifyJWTMiddleware, async (req, res) 
     const result = await getTestHistories(req.decoded.id, req.params.id);
     return res.send(result);
 })
+
+
+app.get("/api/test/:id/result/:historyID", verifyJWTMiddleware, async (req, res) => {
+    console.log("GET /api/test/:id/result/:historyID")
+    console.log(req.decoded.id);
+    const result = await getTestResult(req.decoded.id, req.params.historyID);
+    return res.send(result);
+})
+
 
 app.get("*", (req, res) => {
     console.log("Request to *");

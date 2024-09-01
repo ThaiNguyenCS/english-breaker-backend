@@ -130,64 +130,75 @@ const getTestDetailBySelectedPart = async (testID, partOrder) => {
     }
 };
 
-
 const getTestHistories = async (userID, testID) => {
-    const QUERY = `SELECT * FROM ${process.env.DB_TABLE_TEST_HISTORIES} WHERE userID = '${userID}' AND testID = '${testID}'`; 
+    const QUERY = `SELECT * FROM ${process.env.DB_TABLE_TEST_HISTORIES} h WHERE userID = ? AND testID = ? 
+    ORDER BY h.startingTime DESC`;
     try {
-        const [result] = await database.execute(QUERY);
-        if(result.length > 0)
-        {
-            for(let i = 0; i < result.length; i++)
-            {
-                result[i].startingTime = new Date(result[i].startingTime + " UTC").toString();
+        const [result] = await database.execute(QUERY, [userID, testID]);
+        if (result.length > 0) {
+            for (let i = 0; i < result.length; i++) {
+                result[i].startingTime = new Date(
+                    result[i].startingTime + " UTC"
+                ).toString();
             }
         }
         console.log(result);
-        return {result: true, data : result}
+        return { result: true, data: result };
     } catch (error) {
-        console.log(error)
-        return {result: false, error};
+        console.log(error);
+        return { result: false, error };
     }
-}
+};
 
 const saveUserTestProgress = async (userID, testData) => {
     // userID, testID, partArr, resultArr, date, duration
     const { historyID, partArr, duration, startingTime, testID } = testData;
     console.log(testData);
+
+    let partArrSQLString = JSON.parse(partArr)
+        .map((part) => `'${part}'`)
+        .join(", ");
     let answerArr = Object.entries(testData).filter(
         (pair) => pair[0].length == 36
     );
     // console.log(JSON.stringify(answerArr));
-    answerArr.forEach((item) => console.log(item));
+    // answerArr.forEach((item) => console.log(item));
 
-    let answerArrSQLString = answerArr.map((pair) => `'${pair[0]}'`).join(", ");
+    // let answerArrSQLString = answerArr.map((pair) => `'${pair[0]}'`).join(", ");
     // console.log(answerArrSQLString);
     if (userID) {
-        const EVALUATE_QUERY = `SELECT id, answer from ${process.env.DB_TABLE_TEST_QUESTIONS} WHERE id in (${answerArrSQLString})`;
+        const EVALUATE_QUERY = `SELECT id, answer from ${process.env.DB_TABLE_TEST_QUESTIONS} WHERE partOrder in (${partArrSQLString})`;
         try {
             const [result] = await database.execute(EVALUATE_QUERY);
             if (result.length > 0) {
                 let noOfCorrectQuestions = 0;
-                for (let i = 0; i < answerArr.length; i++) {
-                    const answer = result.find(
-                        (item) => item.id === answerArr[i][0]
+                for (let i = 0; i < result.length; i++) {
+                    const answer = answerArr.find(
+                        (item) => result[i].id === item[0]
                     );
                     if (answer) {
-                        if (answerArr[i][1] === answer.answer) {
-                            answerArr[i].push(true);
-                            noOfCorrectQuestions++;
+                        const trimAnswer = answer[1].trim();
+                        if (trimAnswer) {
+                            if (trimAnswer === result[i].answer) {
+                                answer.push(1); // true answer
+                                noOfCorrectQuestions++;
+                            } else {
+                                answer.push(-1); // false answer
+                            }
                         } else {
-                            answerArr[i].push(false);
+                            answer.push(0); // skip question
                         }
                     } else {
-                        console.log("cannot find the answer");
+                        // questions that user skip. (and the question id is not sent over the form)
+                        answerArr.push([result[i].id, "", 0]);
                     }
                 }
+                // console.log(answerArr);
                 const connection = await database.getConnection();
                 try {
                     await connection.beginTransaction();
                     const QUERY = `INSERT INTO ${process.env.DB_TABLE_TEST_HISTORIES} (id, userId, testId, partArr, duration, startingTime, noOfCorrectQuestions, totalQuestions) 
-        VALUES ('${historyID}', '${userID}', '${testID}', '${partArr}', ${duration}, '${startingTime}', ${noOfCorrectQuestions}, ${answerArr.length})`;
+        VALUES ('${historyID}', '${userID}', '${testID}', '${partArr}', ${duration}, '${startingTime}', ${noOfCorrectQuestions}, ${result.length})`;
                     await connection.query(QUERY);
 
                     for (let i = 0; i < answerArr.length; i++) {
@@ -196,20 +207,19 @@ const saveUserTestProgress = async (userID, testData) => {
                         await connection.query(ANSWER_HISTORY_QUERY);
                     }
                     await connection.commit();
-                    return {result: true}
+                    return { result: true };
                 } catch (error) {
-
                     await connection.rollback();
                     console.error(
                         "Transaction rolled back due to an error:",
                         error
                     );
-                    return {result: false, error}
+                    return { result: false, error };
                 } finally {
                     connection.release();
                 }
             } else {
-                console.log("None answer");
+                console.log("None questions");
             }
             // console.log(answerArr);
         } catch (error) {
@@ -220,6 +230,62 @@ const saveUserTestProgress = async (userID, testData) => {
     return { result: false, msg: "User not existed" };
 };
 
+const getTestResult = async (userID, historyID) => {
+    if (userID) {
+        const HISTORY_QUERY = `SELECT * FROM ${process.env.DB_TABLE_TEST_HISTORIES} h 
+        INNER JOIN ${process.env.DB_TABLE_TESTS} t ON t.id = h.testID 
+        WHERE h.id = ? AND h.userID = ?`;
+        const QUESTION_QUERY = `SELECT h.answer as userAnswer, h.result, q.answer as answer, q.id as questionID, q.questionContent, q.questionOrder, q.partOrder, q.answerArr, q.qType FROM ${process.env.DB_TABLE_TEST_ANSWER_HISTORIES} h
+        JOIN ${process.env.DB_TABLE_TEST_QUESTIONS} q ON
+        q.id = h.questionID
+        WHERE h.historyID = ? AND h.userID = ?
+        ORDER BY q.questionOrder ASC`;
+
+        try {
+            const [historyResult] = await database.execute(HISTORY_QUERY, [
+                historyID,
+                userID,
+            ]);
+            const [questionResult] = await database.execute(QUESTION_QUERY, [
+                historyID,
+                userID,
+            ]);
+            console.log(historyResult);
+            console.log(questionResult);
+            if (historyResult.length === 1 && questionResult.length > 0) {
+                const partArr = JSON.parse(historyResult[0].partArr);
+                const partArrSQLString = partArr
+                    .map((part) => `${part}`)
+                    .join(", ");
+                const PART_QUERY = `SELECT partContent, partOrder, audioFile, sectionArr FROM ${process.env.DB_TABLE_TEST_PARTS} WHERE testID = ? AND partOrder in (${partArrSQLString}) ORDER BY partOrder ASC`;
+                try {
+                    const [partResult] = await database.execute(PART_QUERY, [
+                        historyResult[0].testID,
+                    ]);
+                    console.log(partResult);
+                    return {
+                        result: true,
+                        data: { historyResult: historyResult[0], questionResult, partResult },
+                    };
+                } catch (error) {
+                    console.log(error);
+                    return { result: false, error };
+                }
+            } else {
+                return {
+                    result: false,
+                    msg: "There's something wrong with history or questionResult",
+                };
+            }
+        } catch (error) {
+            console.log(error);
+            return { result: false, error };
+        }
+    } else {
+        return { result: false, error: "No UserId" };
+    }
+};
+
 module.exports = {
     getTests,
     getTestParts,
@@ -227,4 +293,5 @@ module.exports = {
     testCategories,
     getTestHistories,
     saveUserTestProgress,
+    getTestResult,
 };

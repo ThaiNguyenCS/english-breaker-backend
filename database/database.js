@@ -6,6 +6,7 @@ const database = mysql.createPool({
     user: "root",
     password: "map123",
     database: "english_breaker",
+    multipleStatements: true  // Enable multiple statements
 });
 
 
