@@ -3,22 +3,38 @@ const { database } = require("./database");
 const testCategories = [
     { part: "ielts-academic", category: "Ielts Academic" },
     { part: "toeic", category: "Toeic" },
+    { part: "all", category: "All" },
 ];
 
-const getTests = async (testCategoryURL) => {
+const getTests = async (userID, testCategoryURL) => {
     let QUERY = "";
-
-    const category = testCategories.find(
-        (item) => item.part === testCategoryURL
-    );
+    let categoryQuery = "";
+    const category = testCategories.find((item) => item.part === testCategoryURL);
     if (category) {
-        // if category is specified
-        QUERY = `SELECT * FROM tests where testCategory = '${category.category}'`;
+        // get categoryQuery if existed
+        if (category.category !== "All") {
+            categoryQuery = ` where t.testCategory = '${category.category}'`;
+        }
     } else {
-        // get all tests
-        QUERY = `SELECT * FROM tests`;
+        return { result: false, msg: "There's no specific category" };
     }
-    console.log(QUERY);
+    if (userID) {
+        // if user's validated
+        QUERY = `SELECT t.*, h.userID, h.startingTime FROM ${process.env.DB_TABLE_TESTS} t
+        LEFT JOIN (SELECT h.testId, h.userID, h.startingTime
+        FROM ${process.env.DB_TABLE_TEST_HISTORIES} h
+        JOIN (
+            SELECT testId, MAX(startingTime) AS latestAttempt
+            FROM ${process.env.DB_TABLE_TEST_HISTORIES}
+            GROUP BY testId
+        ) latestH ON h.testId = latestH.testId AND h.startingTime = latestH.latestAttempt WHERE h.userID = '${userID}') h ON t.id = h.testID`;
+        QUERY += categoryQuery;
+        console.log(QUERY);
+    } else {
+        QUERY = `SELECT * FROM ${process.env.DB_TABLE_TESTS} t`;
+        QUERY += categoryQuery;
+        console.log(QUERY);
+    }
     try {
         const [result] = await database.execute(QUERY);
         return { result: true, data: result };
@@ -60,15 +76,11 @@ const getTestDetailBySelectedPart = async (testID, partOrder) => {
                 if (result2 && result2.length > 0) {
                     let sectionArr = [];
                     for (let i = 0; i < result2.length; i++) {
-                        sectionArr = sectionArr.concat(
-                            JSON.parse(result2[i].sectionArr)
-                        );
+                        sectionArr = sectionArr.concat(JSON.parse(result2[i].sectionArr));
                         console.log(sectionArr);
                     }
                     console.log(sectionArr);
-                    sectionArr = sectionArr
-                        .map((item) => `'${item}'`)
-                        .join(", ");
+                    sectionArr = sectionArr.map((item) => `'${item}'`).join(", ");
                     const QUERY_3 = `SELECT * FROM test_question_sections where id in (${sectionArr}) ORDER BY sectionOrder ASC`;
                     console.log(QUERY_3);
                     try {
@@ -79,9 +91,7 @@ const getTestDetailBySelectedPart = async (testID, partOrder) => {
                             let questionArr = [];
                             for (let i = 0; i < result3.length; i++) {
                                 // parse question Arr from section
-                                questionArr = questionArr.concat(
-                                    JSON.parse(result3[i].questionArr)
-                                );
+                                questionArr = questionArr.concat(JSON.parse(result3[i].questionArr));
                             }
                             console.log(questionArr);
                             questionArr = questionArr // merge all the question ID to query
@@ -89,15 +99,10 @@ const getTestDetailBySelectedPart = async (testID, partOrder) => {
                                 .join(", ");
                             const QUERY_4 = `SELECT id, questionContent, answerArr, qType, questionOrder, partOrder, testID, sectionOrder FROM test_questions where id in (${questionArr}) ORDER BY questionOrder ASC`;
                             try {
-                                const [result4] = await database.execute(
-                                    QUERY_4
-                                );
+                                const [result4] = await database.execute(QUERY_4);
                                 console.log(result4);
                                 for (let i = 0; i < result4.length; i++) {
-                                    if (result4[i].answerArr)
-                                        result4[i].answerArr = JSON.parse(
-                                            result4[i].answerArr
-                                        );
+                                    if (result4[i].answerArr) result4[i].answerArr = JSON.parse(result4[i].answerArr);
                                 }
                                 // return { result: true, data: {questions: result4, partArr, testID}};
                                 return {
@@ -137,9 +142,7 @@ const getTestHistories = async (userID, testID) => {
         const [result] = await database.execute(QUERY, [userID, testID]);
         if (result.length > 0) {
             for (let i = 0; i < result.length; i++) {
-                result[i].startingTime = new Date(
-                    result[i].startingTime + " UTC"
-                ).toString();
+                result[i].startingTime = new Date(result[i].startingTime + " UTC").toString();
             }
         }
         console.log(result);
@@ -158,9 +161,7 @@ const saveUserTestProgress = async (userID, testData) => {
     let partArrSQLString = JSON.parse(partArr)
         .map((part) => `'${part}'`)
         .join(", ");
-    let answerArr = Object.entries(testData).filter(
-        (pair) => pair[0].length == 36
-    );
+    let answerArr = Object.entries(testData).filter((pair) => pair[0].length == 36);
     // console.log(JSON.stringify(answerArr));
     // answerArr.forEach((item) => console.log(item));
 
@@ -173,9 +174,7 @@ const saveUserTestProgress = async (userID, testData) => {
             if (result.length > 0) {
                 let noOfCorrectQuestions = 0;
                 for (let i = 0; i < result.length; i++) {
-                    const answer = answerArr.find(
-                        (item) => result[i].id === item[0]
-                    );
+                    const answer = answerArr.find((item) => result[i].id === item[0]);
                     if (answer) {
                         const trimAnswer = answer[1].trim();
                         if (trimAnswer) {
@@ -210,10 +209,7 @@ const saveUserTestProgress = async (userID, testData) => {
                     return { result: true };
                 } catch (error) {
                     await connection.rollback();
-                    console.error(
-                        "Transaction rolled back due to an error:",
-                        error
-                    );
+                    console.error("Transaction rolled back due to an error:", error);
                     return { result: false, error };
                 } finally {
                     connection.release();
@@ -242,26 +238,16 @@ const getTestResult = async (userID, historyID) => {
         ORDER BY q.questionOrder ASC`;
 
         try {
-            const [historyResult] = await database.execute(HISTORY_QUERY, [
-                historyID,
-                userID,
-            ]);
-            const [questionResult] = await database.execute(QUESTION_QUERY, [
-                historyID,
-                userID,
-            ]);
+            const [historyResult] = await database.execute(HISTORY_QUERY, [historyID, userID]);
+            const [questionResult] = await database.execute(QUESTION_QUERY, [historyID, userID]);
             console.log(historyResult);
             console.log(questionResult);
             if (historyResult.length === 1 && questionResult.length > 0) {
                 const partArr = JSON.parse(historyResult[0].partArr);
-                const partArrSQLString = partArr
-                    .map((part) => `${part}`)
-                    .join(", ");
+                const partArrSQLString = partArr.map((part) => `${part}`).join(", ");
                 const PART_QUERY = `SELECT partContent, partOrder, audioFile, sectionArr FROM ${process.env.DB_TABLE_TEST_PARTS} WHERE testID = ? AND partOrder in (${partArrSQLString}) ORDER BY partOrder ASC`;
                 try {
-                    const [partResult] = await database.execute(PART_QUERY, [
-                        historyResult[0].testID,
-                    ]);
+                    const [partResult] = await database.execute(PART_QUERY, [historyResult[0].testID]);
                     console.log(partResult);
                     return {
                         result: true,

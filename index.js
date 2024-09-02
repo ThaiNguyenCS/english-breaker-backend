@@ -3,19 +3,19 @@ const express = require("express");
 const cors = require("cors");
 const { verifyJWTMiddleware, router: authRouter } = require("./routes/auth.js");
 const multer = require("multer");
+const { default: axios } = require("axios");
 const upload = multer();
 
-const YOUTUBE_VIDEO_TYPE = 0,
-    TED_VIDEO_TYPE = 1;
 
 const {
     getTopicsMetadata,
     getVideos,
     getVideoByID,
+    YOUTUBE_VIDEO_TYPE,
+    TED_VIDEO_TYPE,
 } = require("./database/videos.js");
 
 const { storeProgress, verifyUser, storeUser } = require("./database/user.js");
-const { default: axios } = require("axios");
 const {
     getTests,
     getTestParts,
@@ -24,6 +24,9 @@ const {
     getTestHistories,
     getTestResult
 } = require("./database/tests.js");
+
+const { getActiveDays } = require("./database/streaks.js");
+const { router: dataRouter } = require("./routes/data.js");
 
 var corsOptions = {
     origin: "http://localhost:5173",
@@ -37,6 +40,7 @@ app.use(cors(corsOptions));
 app.use(upload.none());
 // app.use(express.urlencoded({extended: false}))
 app.use("/auth", authRouter);
+app.use("/data", dataRouter);
 app.use(express.static("../front_end/dist"));
 
 app.post("/api/save-progress", verifyJWTMiddleware, async (req, res) => { // save progress for dictation
@@ -146,17 +150,12 @@ app.get("/api/tests/:topic/:id", async (req, res) => {
     return res.send(result);
 });
 
-app.get("/api/tests/:topic", async (req, res) => {
+app.get("/api/tests/:topic", verifyJWTMiddleware, async (req, res) => {
     console.log("GET /api/tests/:topic");
-    const result = await getTests(req.params.topic);
+    const result = await getTests(req.decoded.id, req.params.topic);
     return res.send(result);
 });
 
-app.get("/api/tests", async (req, res) => {
-    console.log("GET /api/tests");
-    const result = await getTests("ALL");
-    return res.send(result);
-});
 
 app.post("/api/test/practice/save-test-result", verifyJWTMiddleware, async (req, res) => {
     console.log(req.body);

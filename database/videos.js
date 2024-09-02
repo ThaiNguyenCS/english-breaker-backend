@@ -1,5 +1,8 @@
 const { database } = require("./database");
 
+const YOUTUBE_VIDEO_TYPE = 0,
+    TED_VIDEO_TYPE = 1;
+
 const getVideoByID = async (id, userID, videoType) => {
     let QUERY = `SELECT * FROM ${process.env.DB_TABLE_VIDEOS}`;
     // user existed
@@ -88,4 +91,6 @@ module.exports = {
     getVideoByID,
     getTopicsMetadata,
     getVideos,
+    YOUTUBE_VIDEO_TYPE,
+    TED_VIDEO_TYPE
 };
