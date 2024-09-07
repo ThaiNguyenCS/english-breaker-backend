@@ -45,7 +45,9 @@ const getTests = async (userID, testCategoryURL) => {
 };
 
 const getTestParts = async (testID) => {
-    const QUERY_1 = `SELECT * FROM test_parts where testID = '${testID}' ORDER BY partOrder ASC`;
+    const QUERY_1 = `SELECT t.title as testTitle, p.* FROM tests t
+                    JOIN test_parts p ON
+                    t.id = p.testID where testID = '${testID}' ORDER BY partOrder ASC`;
     try {
         const [result1] = await database.execute(QUERY_1);
         console.log(result1);

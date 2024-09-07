@@ -37,7 +37,7 @@ var corsOptions = {
 const app = express();
 app.use(express.json());
 app.use(cors(corsOptions));
-app.use(upload.none());
+app.use(upload.none()); // parse multipart formdata
 // app.use(express.urlencoded({extended: false}))
 app.use("/auth", authRouter);
 app.use("/data", dataRouter);
