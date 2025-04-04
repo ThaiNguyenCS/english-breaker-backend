@@ -39,6 +39,55 @@ WHERE ${process.env.DB_TABLE_USER_PROGRESS}.userID = '${userID}' AND ${process.e
     }
 };
 
+const storeProgress = async (payload) => {
+    let { statusArr, videoID, userID, videoType } = payload;
+    const completeCounts = statusArr.reduce((accumulator, statusCode) => accumulator + (statusCode === 1 ? 1 : 0), 0);
+    statusArr = JSON.stringify(statusArr);
+    // console.log(
+    //     `videoId = ${videoID}, userId = ${userID}, videoType = ${videoType}, result = ${result}`
+    // );
+    try {
+        const FIND_QUERY = `SELECT * FROM ${process.env.DB_TABLE_USER_PROGRESS} WHERE videoID = '${videoID}' AND userID = '${userID}'`;
+        const [result] = await database.execute(FIND_QUERY);
+        if (result) {
+            if (result.length === 0) {
+                const QUERY = `INSERT INTO ${process.env.DB_TABLE_USER_PROGRESS} (videoId, userID, videoType, result, resultArr)
+                VALUES('${videoID}', '${userID}', ${videoType}, ${completeCounts}, '${statusArr}')`;
+                try {
+                    const [result] = await database.execute(QUERY);
+                    return {
+                        result: true,
+                        msg: "Save progress OK",
+                        data: result,
+                    };
+                } catch (error) {
+                    return { result: false, msg: "Save progress fail", error };
+                }
+            } else if (result.length === 1) {
+                const UPDATE_QUERY = `UPDATE ${process.env.DB_TABLE_USER_PROGRESS} 
+                SET result = ${completeCounts}, resultArr = '${statusArr}' 
+                WHERE videoID = '${videoID}' AND userID = '${userID}'`;
+                try {
+                    const [result] = await database.execute(UPDATE_QUERY);
+                    return {
+                        result: true,
+                        msg: "Update progress OK",
+                        data: result,
+                    };
+                } catch (error) {
+                    return {
+                        result: false,
+                        msg: "Update progress fail",
+                        error,
+                    };
+                }
+            }
+        }
+    } catch (error) {
+        return { result: false, msg: "Get previous progress fail", error };
+    }
+};
+
 const getVideos = async (videoType, userID) => {
     let QUERY = "";
     if (userID) {
@@ -46,13 +95,11 @@ const getVideos = async (videoType, userID) => {
         LEFT JOIN ${process.env.DB_TABLE_USER_PROGRESS} u
         ON v.id = u.videoID
         WHERE v.videoType = ${videoType}; `;
-    }
-    else
-    {
+    } else {
         QUERY = `SELECT v.id, v.youtubeID, v.noOfQuestions, v.title, v.videoType FROM ${process.env.DB_TABLE_VIDEOS} v WHERE v.videoType = ${videoType}; `;
     }
 
-    console.log(QUERY)
+    console.log(QUERY);
     try {
         const [result] = await database.execute(QUERY);
         return { status: true, data: result };
@@ -92,5 +139,6 @@ module.exports = {
     getTopicsMetadata,
     getVideos,
     YOUTUBE_VIDEO_TYPE,
-    TED_VIDEO_TYPE
+    TED_VIDEO_TYPE,
+    storeProgress,
 };
